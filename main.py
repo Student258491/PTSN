@@ -17,32 +17,10 @@ def init_db():
     cursor = conn.cursor()
     # Tabela użytkowników
     cursor.execute('''CREATE TABLE IF NOT EXISTS users
-                      (
-                          id
-                          INTEGER
-                          PRIMARY
-                          KEY,
-                          username
-                          TEXT,
-                          password
-                          TEXT,
-                          role
-                          TEXT
-                      )''')
+                      (id INTEGER PRIMARY KEY, username TEXT, password TEXT, role TEXT)''')
     # Tabela wyników testów
-    cursor.execute('''CREATE TABLE IF NOT EXISTS tests
-                      (
-                          id
-                          INTEGER
-                          PRIMARY
-                          KEY,
-                          patient_username
-                          TEXT,
-                          result_data
-                          TEXT,
-                          doctor_decision
-                          TEXT
-                      )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS tests 
+                      (id INTEGER PRIMARY KEY, patient_username TEXT, result_data TEXT, doctor_decision TEXT)''')
 
     # Dodanie testowych użytkowników (jeśli nie istnieją)
     cursor.execute("SELECT COUNT(*) FROM users")
@@ -158,6 +136,11 @@ class AppWindow(QMainWindow):
         self.stacked_widget.addWidget(widget)
 
     def init_patient_screen(self):
+        # ... (existing code)
+        self.start_test_btn = QPushButton("Rozpocznij Test Neurologiczny")  # Make it a class attribute
+        self.start_test_btn.clicked.connect(self.start_patient_test)
+        # ...
+
         self.patient_widget = QWidget()
         layout = QVBoxLayout()
 
@@ -227,20 +210,32 @@ class AppWindow(QMainWindow):
             QMessageBox.warning(self, "Błąd", "Nieprawidłowe dane logowania!")
 
     def start_patient_test(self):
+        self.start_test_btn.setEnabled(False)  # Disable the button to prevent spamming
+        # ... (rest of the code)
+
         self.info_label.setText("Test w toku... Postępuj zgodnie z instrukcjami głosowymi.")
 
-        # Uruchomienie asystenta głosowego (osobny wątek)
+        # Uruchomienie asystenta głosowego
         self.voice_thread = VoiceAssistantThread(
             "Rozpoczynamy badanie układu nerwowego. Proszę podnieść prawą rękę do góry.")
         self.voice_thread.start()
 
-        # Uruchomienie śledzenia z kamery przez MediaPipe (osobny wątek)
-        self.camera_thread = CameraMediaPipeThread(camera_id=0)  # Zmień na 1 lub 2 dla innych kamer
+        # Uruchomienie śledzenia z kamery
+        self.camera_thread = CameraMediaPipeThread(camera_id=0)
         self.camera_thread.change_pixmap_signal.connect(self.update_image)
         self.camera_thread.start()
 
-        # Docelowo po zebraniu danych z MediaPipe powinieneś je tu zapisać w bazie:
-        # np. UPDATE tests SET result_data = 'Analiza...' WHERE patient_username = self.current_user
+        # --- NOWY KOD: Zapis do bazy danych ---
+        # W docelowej wersji te dane pochodziłyby z analizy punktów (landmarks) z MediaPipe.
+        # Na razie symulujemy zapisanie wyniku.
+        conn = sqlite3.connect('telemedycyna.db')
+        cursor = conn.cursor()
+        cursor.execute('''INSERT INTO tests (patient_username, result_data, doctor_decision) 
+                          VALUES (?, ?, ?)''',
+                       (self.current_user, "Ruch zarejestrowany: Prawa ręka uniesiona (Dane z MediaPipe)",
+                        "Oczekuje na decyzję"))
+        conn.commit()
+        conn.close()
 
     def update_image(self, q_img):
         # Aktualizacja obrazu w interfejsie pacjenta
@@ -260,9 +255,18 @@ class AppWindow(QMainWindow):
         else:
             self.results_label.setText("Brak danych w bazie.")
 
+
     def logout(self):
         if hasattr(self, 'camera_thread'):
             self.camera_thread.stop()
+
+        # Reset the patient UI
+        if hasattr(self, 'start_test_btn'):
+            self.start_test_btn.setEnabled(True)
+            self.info_label.setText("Panel Pacjenta - Oczekiwanie na test...")
+            self.video_label.setPixmap(QPixmap())  # Clear the image
+            self.video_label.setText("Kamera wyłączona")
+
         self.current_user = None
         self.user_input.clear()
         self.pass_input.clear()
