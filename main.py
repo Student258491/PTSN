@@ -9,10 +9,9 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QLineEdit,
                              QStackedWidget, QMessageBox, QComboBox, QTableWidget,
                              QTableWidgetItem, QHeaderView, QFrame, QSizePolicy, QGraphicsDropShadowEffect)
-from PyQt6.QtCore import QThread, pyqtSignal, Qt
-from PyQt6.QtGui import QImage, QPixmap, QColor, QFontDatabase
+from PyQt6.QtCore import QThread, pyqtSignal, Qt, QLocale
+from PyQt6.QtGui import QImage, QPixmap, QColor
 from PyQt6.QtTextToSpeech import QTextToSpeech
-from PyQt6.QtCore import QLocale
 
 DB_NAME = 'telemedycyna.db'
 
@@ -47,26 +46,24 @@ QLabel#video_feed {
     border-radius: 12px;
 }
 
-/* --- UPDATED QLINEEDIT FOR HIGH CONTRAST --- */
 QLineEdit {
     padding: 14px;
     font-size: 15px;
-    color: #000000;              /* Pure black text for maximum contrast */
-    font-weight: 600;            /* Slightly bolder text to make it pop */
-    border: 1px solid #9CA3AF;   /* Slightly darker border for better definition */
+    color: #000000;              
+    font-weight: 600;            
+    border: 1px solid #9CA3AF;   
     border-radius: 8px;
-    background-color: #FFFFFF;   /* Pure white background */
+    background-color: #FFFFFF;   
 }
 QLineEdit:focus {
     border: 2px solid #2563EB;
-    background-color: #F8FAFC;   /* Very subtle blue tint on focus */
+    background-color: #F8FAFC;   
     color: #000000;
 }
 QLineEdit::placeholder {
-    color: #6B7280;              /* Distinct gray for placeholders so it isn't confused with input */
-    font-weight: normal;         /* Keep placeholders normal weight */
+    color: #6B7280;              
+    font-weight: normal;         
 }
-/* ------------------------------------------- */
 
 QPushButton {
     background-color: #2563EB;
@@ -94,7 +91,7 @@ QPushButton#danger:hover {
 QComboBox {
     padding: 12px;
     font-size: 15px;
-    color: #000000;              /* Added high contrast to the dropdown text as well */
+    color: #000000;              
     font-weight: 500;
     border: 1px solid #D1D5DB;
     border-radius: 8px;
@@ -106,14 +103,14 @@ QTableWidget {
     border: 1px solid #E2E8F0;
     border-radius: 8px;
     font-size: 14px;
-    color: #000000;              /* High contrast for table text */
+    color: #000000;              
     gridline-color: #E2E8F0;
 }
 QHeaderView::section {
     background-color: #F1F5F9;
     padding: 10px;
     font-weight: bold;
-    color: #1E293B;              /* Darker header text */
+    color: #1E293B;              
     border: none;
     border-bottom: 2px solid #CBD5E1;
 }
@@ -274,7 +271,6 @@ class AppWindow(QMainWindow):
         self.stacked_widget.setCurrentIndex(0)
 
     def create_shadow(self):
-        """Pomocnicza funkcja do tworzenia cieni pod kartami"""
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(25)
         shadow.setColor(QColor(0, 0, 0, 20))
@@ -282,7 +278,6 @@ class AppWindow(QMainWindow):
         return shadow
 
     def create_navbar(self):
-        """Tworzy zunifikowany pasek nawigacyjny na górze"""
         navbar = QFrame()
         navbar.setObjectName("navbar")
         nav_layout = QHBoxLayout()
@@ -306,7 +301,6 @@ class AppWindow(QMainWindow):
         widget = QWidget()
         main_layout = QVBoxLayout()
 
-        # Centered card
         login_container = QFrame()
         login_container.setObjectName("card")
         login_container.setFixedSize(450, 400)
@@ -352,10 +346,8 @@ class AppWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Top Navbar
         layout.addWidget(self.create_navbar())
 
-        # Main Content Area
         content_layout = QVBoxLayout()
         content_layout.setContentsMargins(40, 30, 40, 40)
 
@@ -366,7 +358,6 @@ class AppWindow(QMainWindow):
         card_layout.setContentsMargins(30, 30, 30, 30)
         card_layout.setSpacing(20)
 
-        # Header inside Card
         header_layout = QHBoxLayout()
         title = QLabel("Panel Pacjenta")
         title.setObjectName("header")
@@ -376,14 +367,12 @@ class AppWindow(QMainWindow):
         header_layout.addStretch()
         header_layout.addWidget(self.info_label)
 
-        # Video Area (Scalable)
         self.video_label = QLabel("Kamera wyłączona")
         self.video_label.setObjectName("video_feed")
         self.video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.video_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.video_label.setMinimumSize(640, 360)
 
-        # Controls Area
         control_layout = QHBoxLayout()
         control_layout.setSpacing(15)
 
@@ -399,9 +388,16 @@ class AppWindow(QMainWindow):
         self.start_test_btn = QPushButton("Rozpocznij Test")
         self.start_test_btn.clicked.connect(self.start_patient_test)
 
+        # Added Stop/Finish Button
+        self.stop_test_btn = QPushButton("Zakończ Test")
+        self.stop_test_btn.setObjectName("danger")
+        self.stop_test_btn.setEnabled(False)
+        self.stop_test_btn.clicked.connect(self.stop_patient_test)
+
         control_layout.addWidget(QLabel("Wybierz test:"))
         control_layout.addWidget(self.test_selector)
         control_layout.addWidget(self.start_test_btn)
+        control_layout.addWidget(self.stop_test_btn)
 
         card_layout.addLayout(header_layout)
         card_layout.addWidget(self.video_label, stretch=1)
@@ -420,10 +416,8 @@ class AppWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Top Navbar
         layout.addWidget(self.create_navbar())
 
-        # Main Content Area
         content_layout = QVBoxLayout()
         content_layout.setContentsMargins(40, 30, 40, 40)
 
@@ -437,7 +431,6 @@ class AppWindow(QMainWindow):
         title = QLabel("Baza Wyników")
         title.setObjectName("header")
 
-        # Responsive Data Table
         self.results_table = QTableWidget()
         self.results_table.setColumnCount(4)
         self.results_table.setHorizontalHeaderLabels(["ID", "Pacjent", "Wynik AI", "Status"])
@@ -446,14 +439,26 @@ class AppWindow(QMainWindow):
         self.results_table.setAlternatingRowColors(True)
         self.results_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
 
+        # Button configurations
         refresh_btn = QPushButton("Odśwież wyniki")
-        refresh_btn.setFixedWidth(200)
+        refresh_btn.setFixedWidth(160)
         refresh_btn.clicked.connect(self.load_doctor_results)
+
+        clear_db_btn = QPushButton("Wyczyść bazę")
+        clear_db_btn.setObjectName("danger")  # Utilizes your existing red button styling
+        clear_db_btn.setFixedWidth(160)
+        clear_db_btn.clicked.connect(self.clear_database)
+
+        # Horizontal layout to align buttons neatly to the right
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_layout.addWidget(refresh_btn)
+        btn_layout.addWidget(clear_db_btn)
 
         card_layout.addWidget(title)
         card_layout.addWidget(QLabel("Ostatnie wyniki testów wykonane przez pacjentów:"))
         card_layout.addWidget(self.results_table)
-        card_layout.addWidget(refresh_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        card_layout.addLayout(btn_layout)
 
         card.setLayout(card_layout)
         content_layout.addWidget(card)
@@ -483,7 +488,6 @@ class AppWindow(QMainWindow):
             QMessageBox.warning(self, "Błąd", "Nieprawidłowe dane logowania!")
 
     def request_video_consent(self):
-        """Pokazuje profesjonalne okienko z prośbą o zgodę przed uruchomieniem wideo"""
         msg = QMessageBox(self)
         msg.setWindowTitle("Wymagana Zgoda")
         msg.setText("<b>Ochrona Danych Osobowych</b>")
@@ -502,7 +506,6 @@ class AppWindow(QMainWindow):
         return msg.exec() == QMessageBox.StandardButton.Yes
 
     def start_patient_test(self):
-        # 1. Ask for Video Consent
         has_consent = self.request_video_consent()
 
         if not has_consent:
@@ -510,9 +513,9 @@ class AppWindow(QMainWindow):
             self.info_label.setStyleSheet("color: #EF4444; font-weight: bold;")
             return
 
-        # 2. Proceed if consent given
         self.start_test_btn.setEnabled(False)
         self.test_selector.setEnabled(False)
+        self.stop_test_btn.setEnabled(True)
 
         test_index = self.test_selector.currentIndex()
         if test_index == 0:
@@ -538,6 +541,28 @@ class AppWindow(QMainWindow):
         self.camera_thread.test_result_signal.connect(self.handle_test_success)
         self.camera_thread.start()
 
+    def stop_patient_test(self):
+        """Halts the thread and records an unsuccessful attempt if the test wasn't passed."""
+        if hasattr(self, 'camera_thread') and self.camera_thread.isRunning():
+            passed = self.camera_thread.test_passed
+            self.camera_thread.stop()
+
+            test_name = self.test_selector.currentText()
+
+            # Record failure if explicitly aborted before success criteria were met
+            if not passed:
+                with sqlite3.connect(DB_NAME) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT INTO tests (patient_username, result_data, doctor_decision) VALUES (?, ?, ?)",
+                        (self.current_user, f"Nieudany (Przerwany): {test_name}", "Wymaga uwagi"))
+
+                self.info_label.setText("Test przerwany przez pacjenta. Wynik: Nieudany.")
+                self.info_label.setStyleSheet("color: #EF4444; font-weight: bold;")
+                self.tts.say("Badanie zostało przerwane.")
+
+        self.reset_patient_ui()
+
     def handle_test_success(self, message):
         self.info_label.setText(message)
         self.info_label.setStyleSheet("color: #10B981; font-weight: bold;")
@@ -550,7 +575,6 @@ class AppWindow(QMainWindow):
                            (self.current_user, f"Zaliczony: {test_name}", "Do weryfikacji"))
 
     def update_image(self, q_img):
-        # Odtwarzanie wideo z zaokrąglonymi rogami realizowane po stronie QSS (#video_feed)
         scaled_pixmap = QPixmap.fromImage(q_img).scaled(
             self.video_label.size(),
             Qt.AspectRatioMode.KeepAspectRatio,
@@ -572,27 +596,73 @@ class AppWindow(QMainWindow):
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.results_table.setItem(row_idx, col_idx, item)
 
-    def logout(self):
-        if hasattr(self, 'camera_thread') and self.camera_thread.isRunning():
-            self.camera_thread.stop()
+    def reset_patient_ui(self):
+        """Restores the initial UI state for the patient view."""
+        self.start_test_btn.setEnabled(True)
+        self.stop_test_btn.setEnabled(False)
+        self.test_selector.setEnabled(True)
+        self.video_label.clear()
+        self.video_label.setText("Kamera wyłączona")
 
-        if hasattr(self, 'start_test_btn'):
-            self.start_test_btn.setEnabled(True)
-            self.test_selector.setEnabled(True)
-            self.info_label.setText("Oczekiwanie na wybór testu...")
-            self.info_label.setStyleSheet("font-size: 16px; color: #64748B; font-weight: bold;")
-            self.video_label.clear()
-            self.video_label.setText("Kamera wyłączona")
+    def logout(self):
+        # Gracefully handle abrupt logouts mid-test
+        if hasattr(self, 'camera_thread') and self.camera_thread.isRunning():
+            self.stop_patient_test()
 
         self.current_user = None
         self.user_input.clear()
         self.pass_input.clear()
         self.stacked_widget.setCurrentIndex(0)
 
+        if hasattr(self, 'info_label'):
+            self.info_label.setText("Oczekiwanie na wybór testu...")
+            self.info_label.setStyleSheet("font-size: 16px; color: #64748B; font-weight: bold;")
+
     def closeEvent(self, event):
         if hasattr(self, 'camera_thread') and self.camera_thread.isRunning():
             self.camera_thread.stop()
         event.accept()
+
+    def clear_database(self):
+        """
+        Inicjuje okno dialogowe i usuwa wszystkie rekordy z tabeli 'tests',
+        resetując historię diagnostyczną pacjentów.
+        """
+        confirmation = QMessageBox.question(
+            self,
+            'Potwierdzenie operacji',
+            'Czy na pewno chcesz usunąć wszystkie wyniki pacjentów z bazy danych?\nTej operacji nie można cofnąć.',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if confirmation == QMessageBox.StandardButton.Yes:
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    cursor = conn.cursor()
+
+                    # Definitywne usunięcie wszystkich rekordów testowych
+                    cursor.execute("DELETE FROM tests")
+
+                    # Transakcja zostaje zatwierdzona.
+                    # Brak ingerencji w 'sqlite_sequence', ponieważ mechanizm
+                    # ROWID samodzielnie zarządza kolejnymi identyfikatorami.
+                    conn.commit()
+
+                # Aktualizacja widoku w interfejsie graficznym
+                self.load_doctor_results()
+
+                QMessageBox.information(
+                    self,
+                    'Sukces',
+                    'Baza danych została pomyślnie wyczyszczona.'
+                )
+            except sqlite3.Error as db_error:
+                QMessageBox.critical(
+                    self,
+                    'Błąd bazy danych',
+                    f'Napotkano krytyczny błąd podczas operacji na bazie:\n{str(db_error)}'
+                )
 
 
 if __name__ == '__main__':
