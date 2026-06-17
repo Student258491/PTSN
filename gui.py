@@ -1,21 +1,26 @@
 import sqlite3
 import re
-import pyttsx3
+from typing import Optional
+
+# PyQt6 Core and UI components
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QLineEdit,
                              QStackedWidget, QMessageBox, QComboBox, QTableWidget,
-                             QTableWidgetItem, QHeaderView, QFrame, QSizePolicy, QGraphicsDropShadowEffect)
+                             QTableWidgetItem, QHeaderView, QFrame, QSizePolicy,
+                             QGraphicsDropShadowEffect)
 from PyQt6.QtCore import Qt, QLocale
-from PyQt6.QtGui import QPixmap, QColor
+from PyQt6.QtGui import QPixmap, QColor, QImage  # <-- All visual classes resolved here
 from PyQt6.QtTextToSpeech import QTextToSpeech
 
-# Importy naszych własnych modułów
+# ... remainder of your application logic ...
+
 from database import DB_NAME
 from styles import STYLE_SHEET
 from camera_thread import CameraMediaPipeThread
 
+
 class AppWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.tts = QTextToSpeech()
         self.tts.setLocale(QLocale(QLocale.Language.Polish))
@@ -23,7 +28,8 @@ class AppWindow(QMainWindow):
         self.setMinimumSize(1000, 750)
         self.setStyleSheet(STYLE_SHEET)
 
-        self.current_user_email = None
+        # Utilizing typing.Optional for Python 3.9 compatibility
+        self.current_user_email: Optional[str] = None
 
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
@@ -35,14 +41,14 @@ class AppWindow(QMainWindow):
 
         self.stacked_widget.setCurrentIndex(0)
 
-    def create_shadow(self):
+    def create_shadow(self) -> QGraphicsDropShadowEffect:
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(25)
         shadow.setColor(QColor(0, 0, 0, 20))
         shadow.setOffset(0, 8)
         return shadow
 
-    def create_navbar(self):
+    def create_navbar(self) -> QFrame:
         navbar = QFrame()
         navbar.setObjectName("navbar")
         nav_layout = QHBoxLayout()
@@ -62,7 +68,7 @@ class AppWindow(QMainWindow):
         navbar.setLayout(nav_layout)
         return navbar
 
-    def show_confirmation_dialog(self, title, text):
+    def show_confirmation_dialog(self, title: str, text: str) -> bool:
         msg = QMessageBox(self)
         msg.setWindowTitle(title)
         msg.setText(f"<b>{title}</b>")
@@ -79,8 +85,7 @@ class AppWindow(QMainWindow):
 
         return msg.exec() == QMessageBox.StandardButton.Yes
 
-    # --- EKRAN LOGOWANIA ---
-    def init_login_screen(self):
+    def init_login_screen(self) -> None:
         widget = QWidget()
         main_layout = QVBoxLayout()
 
@@ -134,8 +139,7 @@ class AppWindow(QMainWindow):
         widget.setLayout(main_layout)
         self.stacked_widget.addWidget(widget)
 
-    # --- EKRAN REJESTRACJI ---
-    def init_register_screen(self):
+    def init_register_screen(self) -> None:
         widget = QWidget()
         main_layout = QVBoxLayout()
 
@@ -154,7 +158,7 @@ class AppWindow(QMainWindow):
         register_layout.addWidget(header)
         register_layout.addSpacing(10)
 
-        def create_error_label():
+        def create_error_label() -> QLabel:
             lbl = QLabel()
             lbl.setObjectName("error_msg")
             lbl.setVisible(False)
@@ -252,7 +256,7 @@ class AppWindow(QMainWindow):
         widget.setLayout(main_layout)
         self.stacked_widget.addWidget(widget)
 
-    def toggle_license_field(self):
+    def toggle_license_field(self) -> None:
         if self.reg_role_combo.currentData() == "lekarz":
             self.reg_license.setVisible(True)
         else:
@@ -260,8 +264,7 @@ class AppWindow(QMainWindow):
             self.err_license.setVisible(False)
             self.reg_license.clear()
 
-    # --- EKRAN PACJENTA ---
-    def init_patient_screen(self):
+    def init_patient_screen(self) -> None:
         self.patient_widget = QWidget()
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -308,9 +311,15 @@ class AppWindow(QMainWindow):
         self.start_test_btn = QPushButton("Rozpocznij Test")
         self.start_test_btn.clicked.connect(self.start_patient_test)
 
+        self.stop_test_btn = QPushButton("Zakończ Test")
+        self.stop_test_btn.setObjectName("danger")
+        self.stop_test_btn.setEnabled(False)
+        self.stop_test_btn.clicked.connect(self.stop_patient_test)
+
         control_layout.addWidget(QLabel("Wybierz test:"))
         control_layout.addWidget(self.test_selector)
         control_layout.addWidget(self.start_test_btn)
+        control_layout.addWidget(self.stop_test_btn)
 
         card_layout.addLayout(header_layout)
         card_layout.addWidget(self.video_label, stretch=1)
@@ -323,8 +332,7 @@ class AppWindow(QMainWindow):
         self.patient_widget.setLayout(layout)
         self.stacked_widget.addWidget(self.patient_widget)
 
-    # --- EKRAN LEKARZA ---
-    def init_doctor_screen(self):
+    def init_doctor_screen(self) -> None:
         self.doctor_widget = QWidget()
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -353,13 +361,23 @@ class AppWindow(QMainWindow):
         self.results_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
 
         refresh_btn = QPushButton("Odśwież wyniki")
-        refresh_btn.setFixedWidth(200)
+        refresh_btn.setFixedWidth(160)
         refresh_btn.clicked.connect(self.load_doctor_results)
+
+        clear_db_btn = QPushButton("Wyczyść bazę")
+        clear_db_btn.setObjectName("danger")
+        clear_db_btn.setFixedWidth(160)
+        clear_db_btn.clicked.connect(self.clear_database)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_layout.addWidget(refresh_btn)
+        btn_layout.addWidget(clear_db_btn)
 
         card_layout.addWidget(title)
         card_layout.addWidget(QLabel("Ostatnie wyniki testów wykonane przez pacjentów:"))
         card_layout.addWidget(self.results_table)
-        card_layout.addWidget(refresh_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        card_layout.addLayout(btn_layout)
 
         card.setLayout(card_layout)
         content_layout.addWidget(card)
@@ -368,21 +386,20 @@ class AppWindow(QMainWindow):
         self.doctor_widget.setLayout(layout)
         self.stacked_widget.addWidget(self.doctor_widget)
 
-    # --- LOGIKA APLIKACJI ---
-    def go_to_register(self):
+    def go_to_register(self) -> None:
         self.login_error_label.setVisible(False)
         self.stacked_widget.setCurrentIndex(3)
 
-    def go_to_login(self):
+    def go_to_login(self) -> None:
         self.stacked_widget.setCurrentIndex(0)
 
-    def reset_register_errors(self):
+    def reset_register_errors(self) -> None:
         for err_lbl in [self.err_first_name, self.err_last_name, self.err_email,
                         self.err_phone, self.err_pesel, self.err_pass, self.err_license]:
             err_lbl.setVisible(False)
             err_lbl.setText("")
 
-    def handle_register(self):
+    def handle_register(self) -> None:
         self.reset_register_errors()
 
         first_name = self.reg_first_name.text().strip()
@@ -457,7 +474,7 @@ class AppWindow(QMainWindow):
 
         self.go_to_login()
 
-    def handle_login(self):
+    def handle_login(self) -> None:
         self.login_error_label.setVisible(False)
         email = self.email_input.text().strip()
         password = self.pass_input.text().strip()
@@ -475,6 +492,8 @@ class AppWindow(QMainWindow):
         if result:
             role = result[0]
             self.current_user_email = email
+
+            # Replaced Python 3.10 structural matching with if/elif logic
             if role == 'pacjent':
                 self.stacked_widget.setCurrentIndex(1)
             elif role == 'lekarz':
@@ -484,22 +503,25 @@ class AppWindow(QMainWindow):
             self.login_error_label.setText("Nieprawidłowy adres e-mail lub hasło!")
             self.login_error_label.setVisible(True)
 
-    def request_video_consent(self):
+    def request_video_consent(self) -> bool:
         msg = QMessageBox(self)
         msg.setWindowTitle("Wymagana Zgoda")
         msg.setText("<b>Ochrona Danych Osobowych</b>")
         msg.setInformativeText(
-            "Czy zgadzasz się na to, aby Twoje dane wideo były przetwarzane w celach diagnostycznych?")
+            "Czy zgadzasz się na to, aby Twoje dane wideo były przetwarzane w celach diagnostycznych?\n\n(I agree for my video data to be used by medics)")
         msg.setIcon(QMessageBox.Icon.Information)
         msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         msg.setDefaultButton(QMessageBox.StandardButton.No)
+
         button_yes = msg.button(QMessageBox.StandardButton.Yes)
         button_yes.setText("Wyrażam zgodę")
+
         button_no = msg.button(QMessageBox.StandardButton.No)
         button_no.setText("Odmów")
+
         return msg.exec() == QMessageBox.StandardButton.Yes
 
-    def start_patient_test(self):
+    def start_patient_test(self) -> None:
         if not self.request_video_consent():
             self.info_label.setText("Test anulowany: Brak zgody na wideo.")
             self.info_label.setStyleSheet("color: #EF4444; font-weight: bold;")
@@ -507,8 +529,11 @@ class AppWindow(QMainWindow):
 
         self.start_test_btn.setEnabled(False)
         self.test_selector.setEnabled(False)
+        self.stop_test_btn.setEnabled(True)
 
         test_index = self.test_selector.currentIndex()
+
+        # Replaced Python 3.10 structural matching with if/elif logic
         if test_index == 0:
             test_type, instruction = 'right_arm', "Proszę podnieść prawą rękę do góry."
         elif test_index == 1:
@@ -517,6 +542,8 @@ class AppWindow(QMainWindow):
             test_type, instruction = 'both_arms', "Proszę podnieść obie ręce do góry."
         elif test_index == 3:
             test_type, instruction = 'hands_together', "Proszę wyciągnąć ręce i złączyć dłonie przed sobą."
+        else:
+            return
 
         self.info_label.setText(f"Test w toku: {instruction}")
         self.info_label.setStyleSheet("color: #F59E0B; font-weight: bold;")
@@ -527,7 +554,27 @@ class AppWindow(QMainWindow):
         self.camera_thread.test_result_signal.connect(self.handle_test_success)
         self.camera_thread.start()
 
-    def handle_test_success(self, message):
+    def stop_patient_test(self) -> None:
+        if hasattr(self, 'camera_thread') and self.camera_thread.isRunning():
+            passed = self.camera_thread.test_passed
+            self.camera_thread.stop()
+
+            test_name = self.test_selector.currentText()
+
+            if not passed:
+                with sqlite3.connect(DB_NAME) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT INTO tests (patient_email, result_data, doctor_decision) VALUES (?, ?, ?)",
+                        (self.current_user_email, f"Nieudany (Przerwany): {test_name}", "Wymaga uwagi"))
+
+                self.info_label.setText("Test przerwany przez pacjenta. Wynik: Nieudany.")
+                self.info_label.setStyleSheet("color: #EF4444; font-weight: bold;")
+                self.tts.say("Badanie zostało przerwane.")
+
+        self.reset_patient_ui()
+
+    def handle_test_success(self, message: str) -> None:
         self.info_label.setText(message)
         self.info_label.setStyleSheet("color: #10B981; font-weight: bold;")
         self.tts.say("Zadanie wykonane poprawnie. Dziękuję.")
@@ -538,13 +585,13 @@ class AppWindow(QMainWindow):
             cursor.execute("INSERT INTO tests (patient_email, result_data, doctor_decision) VALUES (?, ?, ?)",
                            (self.current_user_email, f"Zaliczony: {test_name}", "Do weryfikacji"))
 
-    def update_image(self, q_img):
+    def update_image(self, q_img: QImage) -> None:
         scaled_pixmap = QPixmap.fromImage(q_img).scaled(
             self.video_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
         )
         self.video_label.setPixmap(scaled_pixmap)
 
-    def load_doctor_results(self):
+    def load_doctor_results(self) -> None:
         with sqlite3.connect(DB_NAME) as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -562,20 +609,53 @@ class AppWindow(QMainWindow):
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.results_table.setItem(row_idx, col_idx, item)
 
-    def logout(self):
+    def clear_database(self) -> None:
+        confirmation = QMessageBox.question(
+            self,
+            'Potwierdzenie operacji',
+            'Czy na pewno chcesz usunąć wszystkie wyniki pacjentów z bazy danych?\nTej operacji nie można cofnąć.',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if confirmation == QMessageBox.StandardButton.Yes:
+            try:
+                with sqlite3.connect(DB_NAME) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM tests")
+                    conn.commit()
+
+                self.load_doctor_results()
+                QMessageBox.information(
+                    self,
+                    'Sukces',
+                    'Baza danych została pomyślnie wyczyszczona.'
+                )
+            except sqlite3.Error as db_error:
+                QMessageBox.critical(
+                    self,
+                    'Błąd bazy danych',
+                    f'Napotkano krytyczny błąd podczas operacji na bazie:\n{str(db_error)}'
+                )
+
+    def reset_patient_ui(self) -> None:
+        self.start_test_btn.setEnabled(True)
+        self.stop_test_btn.setEnabled(False)
+        self.test_selector.setEnabled(True)
+        self.video_label.clear()
+        self.video_label.setText("Kamera wyłączona")
+
+    def logout(self) -> None:
         if not self.show_confirmation_dialog("Wylogowanie", "Czy na pewno chcesz wylogować się z obecnego konta?"):
             return
 
         if hasattr(self, 'camera_thread') and self.camera_thread.isRunning():
-            self.camera_thread.stop()
+            self.stop_patient_test()
 
         if hasattr(self, 'start_test_btn'):
-            self.start_test_btn.setEnabled(True)
-            self.test_selector.setEnabled(True)
+            self.reset_patient_ui()
             self.info_label.setText("Oczekiwanie na wybór testu...")
             self.info_label.setStyleSheet("font-size: 16px; color: #64748B; font-weight: bold;")
-            self.video_label.clear()
-            self.video_label.setText("Kamera wyłączona")
 
         self.current_user_email = None
         self.email_input.clear()
@@ -583,7 +663,7 @@ class AppWindow(QMainWindow):
         self.login_error_label.setVisible(False)
         self.stacked_widget.setCurrentIndex(0)
 
-    def closeEvent(self, event):
+    def closeEvent(self, event) -> None:
         if self.show_confirmation_dialog("Zamykanie aplikacji", "Czy na pewno chcesz zamknąć program?"):
             if hasattr(self, 'camera_thread') and self.camera_thread.isRunning():
                 self.camera_thread.stop()

@@ -9,14 +9,14 @@ class CameraMediaPipeThread(QThread):
     change_pixmap_signal = pyqtSignal(QImage)
     test_result_signal = pyqtSignal(str)
 
-    def __init__(self, camera_id=0, test_type='right_arm'):
+    def __init__(self, camera_id: int = 0, test_type: str = 'right_arm') -> None:
         super().__init__()
-        self.camera_id = camera_id
-        self.test_type = test_type
-        self._run_flag = True
-        self.test_passed = False
+        self.camera_id: int = camera_id
+        self.test_type: str = test_type
+        self._run_flag: bool = True
+        self.test_passed: bool = False
 
-    def run(self):
+    def run(self) -> None:
         cap = cv2.VideoCapture(self.camera_id, cv2.CAP_DSHOW)
         if not cap.isOpened():
             return
@@ -38,6 +38,7 @@ class CameraMediaPipeThread(QThread):
                     if results.pose_landmarks:
                         mp_drawing.draw_landmarks(image_rgb, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
+                        # Diagnostic inference logic transitioned to if/elif for Python 3.9 compatibility
                         if not self.test_passed:
                             landmarks = results.pose_landmarks.landmark
                             r_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER]
@@ -45,19 +46,20 @@ class CameraMediaPipeThread(QThread):
                             l_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER]
                             l_wrist = landmarks[mp_pose.PoseLandmark.LEFT_WRIST]
 
-                            r_visible = r_shoulder.visibility > 0.5 and r_wrist.visibility > 0.5
-                            l_visible = l_shoulder.visibility > 0.5 and l_wrist.visibility > 0.5
-                            passed = False
+                            r_visible: bool = r_shoulder.visibility > 0.5 and r_wrist.visibility > 0.5
+                            l_visible: bool = l_shoulder.visibility > 0.5 and l_wrist.visibility > 0.5
+                            passed: bool = False
 
-                            if self.test_type == 'right_arm' and r_visible:
-                                if r_wrist.y < r_shoulder.y: passed = True
-                            elif self.test_type == 'left_arm' and l_visible:
-                                if l_wrist.y < l_shoulder.y: passed = True
-                            elif self.test_type == 'both_arms' and r_visible and l_visible:
-                                if r_wrist.y < r_shoulder.y and l_wrist.y < l_shoulder.y: passed = True
+                            if self.test_type == 'right_arm' and r_visible and r_wrist.y < r_shoulder.y:
+                                passed = True
+                            elif self.test_type == 'left_arm' and l_visible and l_wrist.y < l_shoulder.y:
+                                passed = True
+                            elif self.test_type == 'both_arms' and r_visible and l_visible and r_wrist.y < r_shoulder.y and l_wrist.y < l_shoulder.y:
+                                passed = True
                             elif self.test_type == 'hands_together' and r_visible and l_visible:
                                 dist = math.hypot(r_wrist.x - l_wrist.x, r_wrist.y - l_wrist.y)
-                                if dist < 0.05: passed = True
+                                if dist < 0.05:
+                                    passed = True
 
                             if passed:
                                 self.test_passed = True
@@ -70,12 +72,12 @@ class CameraMediaPipeThread(QThread):
                     q_img = QImage(final_frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888).copy()
                     self.change_pixmap_signal.emit(q_img)
 
-                except Exception as e:
+                except Exception:
                     pass
 
                 QThread.msleep(30)
         cap.release()
 
-    def stop(self):
+    def stop(self) -> None:
         self._run_flag = False
         self.wait()
