@@ -296,12 +296,9 @@ class AppWindow(QMainWindow):
         control_layout.setSpacing(15)
 
         self.test_selector = QComboBox()
-        self.test_selector.addItems([
-            "Uniesienie prawej ręki",
-            "Uniesienie lewej ręki",
-            "Uniesienie obu rąk",
-            "Złączenie dłoni przed sobą"
-        ])
+        self.test_selector.addItem("Próba Barrégo (Utrzymanie ramion - 5s)", "barre_test")
+        self.test_selector.addItem("Próba palec-nos (Prawa ręka)", "finger_to_nose_right")
+        self.test_selector.addItem("Próba palec-nos (Lewa ręka)", "finger_to_nose_left")
         self.test_selector.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.start_test_btn = QPushButton("Rozpocznij Test")
@@ -528,21 +525,20 @@ class AppWindow(QMainWindow):
         self.test_selector.setEnabled(False)
         self.stop_test_btn.setEnabled(True)
 
-        test_index = self.test_selector.currentIndex()
-        if test_index == 0:
-            test_type, instruction = 'right_arm', "Proszę podnieść prawą rękę do góry."
-        elif test_index == 1:
-            test_type, instruction = 'left_arm', "Proszę podnieść lewą rękę do góry."
-        elif test_index == 2:
-            test_type, instruction = 'both_arms', "Proszę podnieść obie ręce do góry."
-        elif test_index == 3:
-            test_type, instruction = 'hands_together', "Proszę wyciągnąć ręce i złączyć dłonie przed sobą."
+        test_type = self.test_selector.currentData()
+
+        if test_type == 'barre_test':
+            instruction = "Proszę wyciągnąć obie ręce prosto przed siebie na wysokości barków i utrzymać je nieruchomo przez 5 sekund."
+        elif test_type == 'finger_to_nose_right':
+            instruction = "Proszę wyciągnąć prawą rękę szeroko w bok, a następnie powolnym ruchem dotknąć palcem wskazującym czubka nosa."
+        elif test_type == 'finger_to_nose_left':
+            instruction = "Proszę wyciągnąć lewą rękę szeroko w bok, a następnie powolnym ruchem dotknąć palcem wskazującym czubka nosa."
         else:
             return
 
         self.info_label.setText(f"Test w toku: {instruction}")
         self.info_label.setStyleSheet("color: #F59E0B; font-weight: bold;")
-        self.tts.say(f"Rozpoczynamy badanie. {instruction}")
+        self.tts.say(f"Rozpoczynamy badanie neurologiczne. {instruction}")
 
         self.camera_thread = CameraMediaPipeThread(test_type=test_type)
         self.camera_thread.change_pixmap_signal.connect(self.update_image)

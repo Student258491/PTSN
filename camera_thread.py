@@ -2,19 +2,25 @@ import cv2
 import numpy as np
 import mediapipe as mp
 import math
+import time
+from typing import Optional
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QImage
+
 
 class CameraMediaPipeThread(QThread):
     change_pixmap_signal = pyqtSignal(QImage)
     test_result_signal = pyqtSignal(str)
 
-    def __init__(self, camera_id: int = 0, test_type: str = 'right_arm') -> None:
+    def __init__(self, camera_id: int = 0, test_type: str = 'barre_test') -> None:
         super().__init__()
         self.camera_id: int = camera_id
         self.test_type: str = test_type
         self._run_flag: bool = True
         self.test_passed: bool = False
+
+        self.start_time: Optional[float] = None
+        self.test_stage: int = 0
 
     def run(self) -> None:
         cap = cv2.VideoCapture(self.camera_id, cv2.CAP_DSHOW)
@@ -38,32 +44,57 @@ class CameraMediaPipeThread(QThread):
                     if results.pose_landmarks:
                         mp_drawing.draw_landmarks(image_rgb, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
-                        # Diagnostic inference logic transitioned to if/elif for Python 3.9 compatibility
                         if not self.test_passed:
                             landmarks = results.pose_landmarks.landmark
+
+                            nose = landmarks[mp_pose.PoseLandmark.NOSE]
                             r_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER]
-                            r_wrist = landmarks[mp_pose.PoseLandmark.RIGHT_WRIST]
                             l_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER]
+                            r_wrist = landmarks[mp_pose.PoseLandmark.RIGHT_WRIST]
                             l_wrist = landmarks[mp_pose.PoseLandmark.LEFT_WRIST]
+                            r_index = landmarks[mp_pose.PoseLandmark.RIGHT_INDEX]
+                            l_index = landmarks[mp_pose.PoseLandmark.LEFT_INDEX]
 
-                            r_visible: bool = r_shoulder.visibility > 0.5 and r_wrist.visibility > 0.5
-                            l_visible: bool = l_shoulder.visibility > 0.5 and l_wrist.visibility > 0.5
-                            passed: bool = False
+                            core_visible = r_shoulder.visibility > 0.5 and l_shoulder.visibility > 0.5 and nose.visibility > 0.5
+                            passed = False
 
-                            if self.test_type == 'right_arm' and r_visible and r_wrist.y < r_shoulder.y:
-                                passed = True
-                            elif self.test_type == 'left_arm' and l_visible and l_wrist.y < l_shoulder.y:
-                                passed = True
-                            elif self.test_type == 'both_arms' and r_visible and l_visible and r_wrist.y < r_shoulder.y and l_wrist.y < l_shoulder.y:
-                                passed = True
-                            elif self.test_type == 'hands_together' and r_visible and l_visible:
-                                dist = math.hypot(r_wrist.x - l_wrist.x, r_wrist.y - l_wrist.y)
-                                if dist < 0.05:
+                            if self.test_type == 'barre_test' and core_visible:
+                                if r_wrist.visibility > 0.5 and l_wrist.visibility > 0.5:
+                                    arms_extended = (abs(r_wrist.y - r_shoulder.y) < 0.15) and (
+                                                abs(l_wrist.y - l_shoulder.y) < 0.15)
+
+                                    if arms_extended:
+                                        if self.start_time is None:
+                                            self.start_time = time.time()
+                                        elif time.time() - self.start_time >= 5.0:
+                                            passed = True
+                                    else:
+                                        self.start_time = None
+
+                            elif self.test_type == 'finger_to_nose_right' and core_visible and r_index.visibility > 0.5:
+                                dist_to_nose = math.hypot(r_index.x - nose.x, r_index.y - nose.y)
+                                dist_to_shoulder = math.hypot(r_index.x - r_shoulder.x, r_index.y - r_shoulder.y)
+
+                                if self.test_stage == 0 and dist_to_shoulder > 0.25:
+                                    self.test_stage = 1
+
+                                elif self.test_stage == 1 and dist_to_nose < 0.07:
+                                    passed = True
+
+                            elif self.test_type == 'finger_to_nose_left' and core_visible and l_index.visibility > 0.5:
+                                dist_to_nose = math.hypot(l_index.x - nose.x, l_index.y - nose.y)
+                                dist_to_shoulder = math.hypot(l_index.x - l_shoulder.x, l_index.y - l_shoulder.y)
+
+                                if self.test_stage == 0 and dist_to_shoulder > 0.25:
+                                    self.test_stage = 1
+
+                                elif self.test_stage == 1 and dist_to_nose < 0.07:
                                     passed = True
 
                             if passed:
                                 self.test_passed = True
-                                self.test_result_signal.emit("Sukces: Zadanie wykonane poprawnie.")
+                                self.test_result_signal.emit(
+                                    f"Sukces: {self.test_type.replace('_', ' ').upper()} zaliczony poprawnie.")
 
                     final_frame = np.require(image_rgb, dtype=np.uint8, requirements=['C_CONTIGUOUS'])
                     h, w, ch = final_frame.shape
