@@ -1,5 +1,5 @@
-import sqlite3
 import re
+import requests
 from typing import Optional
 
 # PyQt6 Core and UI components
@@ -9,28 +9,24 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
                              QTableWidgetItem, QHeaderView, QFrame, QSizePolicy,
                              QGraphicsDropShadowEffect)
 from PyQt6.QtCore import Qt, QLocale
-from PyQt6.QtGui import QPixmap, QColor, QImage  # <-- All visual classes resolved here
+from PyQt6.QtGui import QPixmap, QColor, QImage
 from PyQt6.QtTextToSpeech import QTextToSpeech
 
-# ... remainder of your application logic ...
-
-from database import DB_NAME
 from styles import STYLE_SHEET
 from camera_thread import CameraMediaPipeThread
 
+SERVER_URL = "http://127.0.0.1:8000"
 
 class AppWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.tts = QTextToSpeech()
         self.tts.setLocale(QLocale(QLocale.Language.Polish))
-        self.setWindowTitle("System Diagnostyki Neurologicznej")
+        self.setWindowTitle("System Diagnostyki Neurologicznej (Wersja Sieciowa)")
         self.setMinimumSize(1000, 750)
         self.setStyleSheet(STYLE_SHEET)
 
-        # Utilizing typing.Optional for Python 3.9 compatibility
         self.current_user_email: Optional[str] = None
-
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
 
@@ -451,20 +447,22 @@ class AppWindow(QMainWindow):
         if not is_valid:
             return
 
-        with sqlite3.connect(DB_NAME) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM users WHERE email=?", (email,))
-            if cursor.fetchone():
+        dane_rejestracji = {
+            "email": email, "password": password, "role": role,
+            "first_name": first_name, "last_name": last_name,
+            "phone": phone, "pesel": pesel, "license_number": license_num
+        }
+
+        try:
+            response = requests.post(f"{SERVER_URL}/api/register", json=dane_rejestracji)
+            if response.status_code == 400:
                 self.err_email.setText("Konto z tym adresem e-mail już istnieje!")
                 self.err_email.setVisible(True)
                 return
-
-            cursor.execute("""
-                           INSERT INTO users (email, password, role, first_name, last_name, phone, pesel,
-                                              license_number)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                           """, (email, password, role, first_name, last_name, phone, pesel, license_num))
-            conn.commit()
+            response.raise_for_status()
+        except requests.exceptions.ConnectionError:
+            QMessageBox.critical(self, "Błąd Sieci", "Nie można połączyć się z serwerem!")
+            return
 
         QMessageBox.information(self, "Sukces", "Konto zostało pomyślnie utworzone!")
 
@@ -484,23 +482,23 @@ class AppWindow(QMainWindow):
             self.login_error_label.setVisible(True)
             return
 
-        with sqlite3.connect(DB_NAME) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT role FROM users WHERE email=? AND password=?", (email, password))
-            result = cursor.fetchone()
+        try:
+            response = requests.post(f"{SERVER_URL}/api/login", json={"email": email, "password": password})
+            if response.status_code == 200:
+                data = response.json()
+                role = data["role"]
+                self.current_user_email = email
 
-        if result:
-            role = result[0]
-            self.current_user_email = email
-
-            # Replaced Python 3.10 structural matching with if/elif logic
-            if role == 'pacjent':
-                self.stacked_widget.setCurrentIndex(1)
-            elif role == 'lekarz':
-                self.load_doctor_results()
-                self.stacked_widget.setCurrentIndex(2)
-        else:
-            self.login_error_label.setText("Nieprawidłowy adres e-mail lub hasło!")
+                if role == 'pacjent':
+                    self.stacked_widget.setCurrentIndex(1)
+                elif role == 'lekarz':
+                    self.load_doctor_results()
+                    self.stacked_widget.setCurrentIndex(2)
+            else:
+                self.login_error_label.setText("Nieprawidłowy adres e-mail lub hasło!")
+                self.login_error_label.setVisible(True)
+        except requests.exceptions.ConnectionError:
+            self.login_error_label.setText("Brak połączenia z serwerem API!")
             self.login_error_label.setVisible(True)
 
     def request_video_consent(self) -> bool:
@@ -508,14 +506,13 @@ class AppWindow(QMainWindow):
         msg.setWindowTitle("Wymagana Zgoda")
         msg.setText("<b>Ochrona Danych Osobowych</b>")
         msg.setInformativeText(
-            "Czy zgadzasz się na to, aby Twoje dane wideo były przetwarzane w celach diagnostycznych?\n\n(I agree for my video data to be used by medics)")
+            "Czy zgadzasz się na to, aby Twoje dane wideo były przetwarzane w celach diagnostycznych?")
         msg.setIcon(QMessageBox.Icon.Information)
         msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         msg.setDefaultButton(QMessageBox.StandardButton.No)
 
         button_yes = msg.button(QMessageBox.StandardButton.Yes)
         button_yes.setText("Wyrażam zgodę")
-
         button_no = msg.button(QMessageBox.StandardButton.No)
         button_no.setText("Odmów")
 
@@ -532,8 +529,6 @@ class AppWindow(QMainWindow):
         self.stop_test_btn.setEnabled(True)
 
         test_index = self.test_selector.currentIndex()
-
-        # Replaced Python 3.10 structural matching with if/elif logic
         if test_index == 0:
             test_type, instruction = 'right_arm', "Proszę podnieść prawą rękę do góry."
         elif test_index == 1:
@@ -558,15 +553,17 @@ class AppWindow(QMainWindow):
         if hasattr(self, 'camera_thread') and self.camera_thread.isRunning():
             passed = self.camera_thread.test_passed
             self.camera_thread.stop()
-
             test_name = self.test_selector.currentText()
 
             if not passed:
-                with sqlite3.connect(DB_NAME) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "INSERT INTO tests (patient_email, result_data, doctor_decision) VALUES (?, ?, ?)",
-                        (self.current_user_email, f"Nieudany (Przerwany): {test_name}", "Wymaga uwagi"))
+                try:
+                    requests.post(f"{SERVER_URL}/api/tests", json={
+                        "patient_email": self.current_user_email,
+                        "result_data": f"Nieudany (Przerwany): {test_name}",
+                        "doctor_decision": "Wymaga uwagi"
+                    })
+                except requests.exceptions.ConnectionError:
+                    pass
 
                 self.info_label.setText("Test przerwany przez pacjenta. Wynik: Nieudany.")
                 self.info_label.setStyleSheet("color: #EF4444; font-weight: bold;")
@@ -580,10 +577,14 @@ class AppWindow(QMainWindow):
         self.tts.say("Zadanie wykonane poprawnie. Dziękuję.")
 
         test_name = self.test_selector.currentText()
-        with sqlite3.connect(DB_NAME) as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO tests (patient_email, result_data, doctor_decision) VALUES (?, ?, ?)",
-                           (self.current_user_email, f"Zaliczony: {test_name}", "Do weryfikacji"))
+        try:
+            requests.post(f"{SERVER_URL}/api/tests", json={
+                "patient_email": self.current_user_email,
+                "result_data": f"Zaliczony: {test_name}",
+                "doctor_decision": "Do weryfikacji"
+            })
+        except requests.exceptions.ConnectionError:
+            QMessageBox.warning(self, "Błąd Sieci", "Zadanie zaliczone, ale nie udało się wysłać wyniku na serwer.")
 
     def update_image(self, q_img: QImage) -> None:
         scaled_pixmap = QPixmap.fromImage(q_img).scaled(
@@ -592,51 +593,39 @@ class AppWindow(QMainWindow):
         self.video_label.setPixmap(scaled_pixmap)
 
     def load_doctor_results(self) -> None:
-        with sqlite3.connect(DB_NAME) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                           SELECT t.id, u.first_name || ' ' || u.last_name, t.result_data, t.doctor_decision
-                           FROM tests t
-                                    JOIN users u ON t.patient_email = u.email
-                           """)
-            rows = cursor.fetchall()
-
-        self.results_table.setRowCount(0)
-        for row_idx, row_data in enumerate(rows):
-            self.results_table.insertRow(row_idx)
-            for col_idx, data in enumerate(row_data):
-                item = QTableWidgetItem(str(data))
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.results_table.setItem(row_idx, col_idx, item)
+        try:
+            response = requests.get(f"{SERVER_URL}/api/tests")
+            if response.status_code == 200:
+                rows = response.json().get("tests", [])
+                self.results_table.setRowCount(0)
+                for row_idx, row_data in enumerate(rows):
+                    self.results_table.insertRow(row_idx)
+                    for col_idx, data in enumerate(row_data):
+                        item = QTableWidgetItem(str(data))
+                        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        self.results_table.setItem(row_idx, col_idx, item)
+            else:
+                QMessageBox.warning(self, "Błąd", "Nie udało się pobrać danych z serwera.")
+        except requests.exceptions.ConnectionError:
+            QMessageBox.critical(self, "Błąd Sieci", "Brak połączenia z serwerem API.")
 
     def clear_database(self) -> None:
         confirmation = QMessageBox.question(
             self,
             'Potwierdzenie operacji',
-            'Czy na pewno chcesz usunąć wszystkie wyniki pacjentów z bazy danych?\nTej operacji nie można cofnąć.',
+            'Czy na pewno chcesz usunąć wszystkie wyniki pacjentów z serwera?\nTej operacji nie można cofnąć.',
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
 
         if confirmation == QMessageBox.StandardButton.Yes:
             try:
-                with sqlite3.connect(DB_NAME) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("DELETE FROM tests")
-                    conn.commit()
-
-                self.load_doctor_results()
-                QMessageBox.information(
-                    self,
-                    'Sukces',
-                    'Baza danych została pomyślnie wyczyszczona.'
-                )
-            except sqlite3.Error as db_error:
-                QMessageBox.critical(
-                    self,
-                    'Błąd bazy danych',
-                    f'Napotkano krytyczny błąd podczas operacji na bazie:\n{str(db_error)}'
-                )
+                response = requests.delete(f"{SERVER_URL}/api/tests")
+                if response.status_code == 200:
+                    self.load_doctor_results()
+                    QMessageBox.information(self, 'Sukces', 'Wyniki zostały pomyślnie usunięte z serwera.')
+            except requests.exceptions.ConnectionError:
+                QMessageBox.critical(self, 'Błąd Sieci', 'Brak połączenia z serwerem.')
 
     def reset_patient_ui(self) -> None:
         self.start_test_btn.setEnabled(True)
